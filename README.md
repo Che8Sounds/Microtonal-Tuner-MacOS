@@ -16,7 +16,7 @@ A simple macOS tuner app with support for custom tunings.
 ## Download
 
 If you only want the ready-to-use `.app`, you can get the latest version here:  
-- **Gumroad:** https://che8sounds.gumroad.com 
+- **Gumroad:** https://che8sounds.gumroad.com/l/cexcg
 - **Patreon:** https://www.patreon.com/c/Che8Sounds  
 
 ---
