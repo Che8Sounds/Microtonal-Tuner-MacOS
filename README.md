@@ -6,7 +6,8 @@ A simple macOS tuner app with support for custom tunings.
 
 ## Features
  
-- Load `.scl` files to set custom tuning systems  
+- Load `.scl` files to set custom tuning systems  Or
+- Create, edit, save and load a Custom Scale
 - Root note is adjustable (step 0 always corresponds to the chosen root)  
 - Shows nearest scale step index, note name, and deviation  
 - Falls back to standard 12-TET tuner when no scale is loaded  
