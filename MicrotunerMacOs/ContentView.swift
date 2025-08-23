@@ -4,173 +4,251 @@
 //  Created by Ghifar on 20.08.25.
 
 
+#if os(macOS)
+import AppKit
+#endif
 import SwiftUI
 import AVFoundation
 import Accelerate
 import UniformTypeIdentifiers
+import Lottie
 
 struct ContentView: View {
     @StateObject private var tuner = Tuner()
     @State private var showSettings = false
     @State private var showSidebar = true
     @State private var showImporter = false
+    @State private var showSplash = true
+    @State private var splashScaleFG: CGFloat = 1.0
+    @State private var showCreateScale = false
+    @State private var showLoadScale = false
+    @State private var showSaveConflict = false
+    @State private var conflictURL: URL? = nil
+    @State private var renameText: String = ""
 
     var body: some View {
-        ZStack(alignment: .trailing) {
-            HStack(spacing: 0) {
-                if showSidebar {
-                    // Left scale sidebar
-                    ScaleSidebar(tuner: tuner)
+        ZStack {
+            ZStack(alignment: .trailing) {
+                HStack(spacing: 0) {
+                    if showSidebar {
+                        // Left scale sidebar
+                        ScaleSidebar(
+                            tuner: tuner,
+                            showSaveConflict: $showSaveConflict,
+                            conflictURL: $conflictURL,
+                            renameText: $renameText
+                        )
                         .frame(width: 340)
                         .background(.ultraThinMaterial)
                         .transition(.move(edge: .leading).combined(with: .opacity))
 
-                    Divider()
-                }
-
-                // Main tuner content
-                VStack(spacing: 16) {
-                    HStack(spacing: 12) {
-                        // Sidebar toggle
-                        Button {
-                            withAnimation(.easeInOut(duration: 0.25)) { showSidebar.toggle() }
-                        } label: {
-                            Image(systemName: showSidebar ? "sidebar.leading" : "sidebar.leading")
-                        }
-                        .help(showSidebar ? "Hide scale list" : "Show scale list")
-
-                        // Import .scl
-                        Button("Import .scl…") { showImporter = true }
-
-                        Spacer()
-
-                        // Settings
-                        Button {
-                            withAnimation(.easeOut(duration: 0.25)) { showSettings.toggle() }
-                        } label: {
-                            Image(systemName: "gearshape")
-                                .imageScale(.large)
-                        }
-                        .buttonStyle(.plain)
+                        Divider()
                     }
 
-                    Text("Microtonal Tuner")
-                        .font(.largeTitle)
-                        .bold()
+                    // Main tuner content
+                    VStack(spacing: 16) {
+                        HStack(spacing: 12) {
+                            // Sidebar toggle
+                            Button {
+                                withAnimation(.easeInOut(duration: 0.25)) { showSidebar.toggle() }
+                            } label: {
+                                Image(systemName: showSidebar ? "sidebar.leading" : "sidebar.leading")
+                            }
+                            .help(showSidebar ? "Hide scale list" : "Show scale list")
 
-                    // Current frequency
-                    Text(String(format: "%.2f Hz", tuner.frequency))
-                        .font(.system(size: 32, weight: .semibold, design: .rounded))
-                        .monospacedDigit()
-                        .accessibilityLabel("Detected frequency in Hertz")
+                            // Import .scl
+                            Button("Import .scl…") { showImporter = true }
 
-                    // Absolute note + microtonal/12‑TET detune info
-                    VStack(spacing: 4) {
-                        HStack(alignment: .firstTextBaseline, spacing: 8) {
-                            Text(tuner.noteName)
-                                .font(.system(size: 44, weight: .bold, design: .rounded))
-                            // Show absolute 12‑TET detune right next to the note, integer cents
-                            Text(String(format: "%+d", Int(round(tuner.absoluteCents))))
-                                .font(.system(size: 34, weight: .semibold, design: .rounded))
-                                .monospacedDigit()
-                                .foregroundStyle(colorForCents(tuner.absoluteCents))
+                        // My scales (from saved library)
+                        Button("My scales…") { showLoadScale = true }
+
+                        // Custom scale
+                        Button("Custom scale…") { showCreateScale = true }
+
+                            Spacer()
+
+                            // Settings
+                            Button {
+                                withAnimation(.easeOut(duration: 0.25)) { showSettings.toggle() }
+                            } label: {
+                                Image(systemName: "gearshape")
+                                    .imageScale(.large)
+                            }
+                            .buttonStyle(.plain)
                         }
-                        .background(
+
+                        Text("Microtonal Tuner")
+                            .font(.largeTitle)
+                            .bold()
+
+                        // Current frequency
+                        Text(String(format: "%.2f Hz", tuner.frequency))
+                            .font(.system(size: 32, weight: .semibold, design: .rounded))
+                            .monospacedDigit()
+                            .accessibilityLabel("Detected frequency in Hertz")
+
+                        // Absolute note + microtonal/12‑TET detune info
+                        VStack(spacing: 4) {
                             HStack(alignment: .firstTextBaseline, spacing: 8) {
-                                // Use representative tallest glyphs to reserve vertical space
-                                Text("A♯4")
+                                Text(tuner.noteName)
                                     .font(.system(size: 44, weight: .bold, design: .rounded))
-                                Text("+88")
+                                // Show absolute 12‑TET detune right next to the note, integer cents
+                                Text(String(format: "%+d", Int(round(tuner.absoluteCents))))
                                     .font(.system(size: 34, weight: .semibold, design: .rounded))
                                     .monospacedDigit()
-                            }
-                            .opacity(0)
-                        )
-
-                        // When a microtonal scale is loaded, also show deviation to the nearest scale anchor underneath
-                        if tuner.scaleStepsCents != nil {
-                            // Stabilized step label row (prevents vertical jump when it appears/disappears)
-                            ZStack {
-                                Text(tuner.stepLabel ?? "00 : A♯ +88")
-                                    .font(.system(size: 44, weight: .bold, design: .rounded))
-                                    .foregroundStyle(.secondary)
-                                    .opacity(tuner.stepLabel == nil ? 0 : 1)
+                                    .foregroundStyle(colorForCents(tuner.absoluteCents))
                             }
                             .background(
-                                Text("00 : A♯ +88")
-                                    .font(.system(size: 44, weight: .bold, design: .rounded))
-                                    .opacity(0)
+                                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                                    // Use representative tallest glyphs to reserve vertical space
+                                    Text("A♯4")
+                                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                                    Text("+88")
+                                        .font(.system(size: 34, weight: .semibold, design: .rounded))
+                                        .monospacedDigit()
+                                }
+                                .opacity(0)
                             )
 
-                            Text(String(format: "%+0.1f cents to scale", tuner.cents))
-                                .font(.title3)
-                                .monospacedDigit()
-                                .foregroundStyle(colorForCents(tuner.cents))
+                            // When a microtonal scale is loaded, also show deviation to the nearest scale anchor underneath
+                            if tuner.scaleStepsCents != nil {
+                                // Stabilized step label row (prevents vertical jump when it appears/disappears)
+                                ZStack {
+                                    Text(tuner.stepLabel ?? "00 : A♯ +88")
+                                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                                        .foregroundStyle(.secondary)
+                                        .opacity(tuner.stepLabel == nil ? 0 : 1)
+                                }
+                                .background(
+                                    Text("00 : A♯ +88")
+                                        .font(.system(size: 44, weight: .bold, design: .rounded))
+                                        .opacity(0)
+                                )
+
+                                Text(String(format: "%+0.1f cents to scale", tuner.cents))
+                                    .font(.title3)
+                                    .monospacedDigit()
+                                    .foregroundStyle(colorForCents(tuner.cents))
+                            }
+                        }
+
+                        // React/Figma-inspired arc indicator (responsive width)
+                        GeometryReader { proxy in
+                            // Make the arc span most of the available width, with sensible caps
+                            let arcSize = max(360.0, min(Double(proxy.size.width) - 160.0, 960.0))
+                            TunerArcIndicator(value: tuner.cents, frequency: tuner.frequency, size: CGFloat(arcSize))
+                                .frame(width: proxy.size.width, height: CGFloat(arcSize) * 0.8, alignment: .center)
+                        }
+                        .frame(minHeight: 260) // ensures we reserve enough height for larger widths
+                        .padding(.vertical, 8)
+
+                        HStack(spacing: 12) {
+                            Button(tuner.isRunning ? "Stop" : "Start") {
+                                tuner.isRunning ? tuner.stop() : tuner.start()
+                            }
+                            .keyboardShortcut(.space, modifiers: [])
                         }
                     }
-
-                    // React/Figma-inspired arc indicator (responsive width)
-                    GeometryReader { proxy in
-                        // Make the arc span most of the available width, with sensible caps
-                        let arcSize = max(360.0, min(Double(proxy.size.width) - 160.0, 960.0))
-                        TunerArcIndicator(value: tuner.cents, frequency: tuner.frequency, size: CGFloat(arcSize))
-                            .frame(width: proxy.size.width, height: CGFloat(arcSize) * 0.8, alignment: .center)
-                    }
-                    .frame(minHeight: 260) // ensures we reserve enough height for larger widths
-                    .padding(.vertical, 8)
-
-                    HStack(spacing: 12) {
-                        Button(tuner.isRunning ? "Stop" : "Start") {
-                            tuner.isRunning ? tuner.stop() : tuner.start()
-                        }
-                        .keyboardShortcut(.space, modifiers: [])
-                    }
+                    .padding(24)
+                    .onDisappear { tuner.stop() }
                 }
-                .padding(24)
-                .onAppear { tuner.start() }
-                .onDisappear { tuner.stop() }
+
+                // Right-side settings drawer
+                if showSettings {
+                    SettingsPanel(tuner: tuner, close: { withAnimation(.easeIn(duration: 0.2)) { showSettings = false } })
+                        .frame(width: 340)
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
+                        .shadow(radius: 8)
+                }
+            }
+            .fileImporter(
+                isPresented: $showImporter,
+                allowedContentTypes: [
+                    UTType(filenameExtension: "scl") ?? .plainText,
+                    .utf8PlainText,
+                    .text,
+                    .plainText,
+                    .data
+                ]
+            ) { result in
+                switch result {
+                case .success(let url):
+                    print("Importer picked URL: \(url)")
+                    var success = false
+                    if url.startAccessingSecurityScopedResource() {
+                        defer { url.stopAccessingSecurityScopedResource() }
+                        success = Tuner.handleSCLImport(url: url, into: tuner)
+                    } else {
+                        success = Tuner.handleSCLImport(url: url, into: tuner)
+                    }
+                    if !success {
+                        print("Failed to import .scl from \(url)")
+                    }
+                case .failure(let err):
+                    print("Importer error: \(err)")
+                }
+            }
+            .sheet(isPresented: $showCreateScale) {
+                ScaleCreatorSheet(tuner: tuner, isPresented: $showCreateScale)
+                    .frame(minWidth: 520, minHeight: 520)
+            }
+            .sheet(isPresented: $showLoadScale) {
+                LoadScaleSheet(tuner: tuner, isPresented: $showLoadScale)
+                    .frame(minWidth: 520, minHeight: 520)
+            }
+            .sheet(isPresented: $showSaveConflict) {
+                if let url = conflictURL {
+                    SaveConflictSheet(tuner: tuner, existingURL: url, renameText: $renameText, isPresented: $showSaveConflict)
+                        .frame(minWidth: 420, minHeight: 200)
+                }
             }
 
-            // Right-side settings drawer
-            if showSettings {
-                SettingsPanel(tuner: tuner, close: { withAnimation(.easeIn(duration: 0.2)) { showSettings = false } })
-                    .frame(width: 340)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-                    .shadow(radius: 8)
+            // Splash overlay
+            if showSplash {
+                ZStack {
+                    Color.black.ignoresSafeArea()
+
+                    // Foreground loader
+                    GeometryReader { proxy in
+                        let side = min(proxy.size.width, proxy.size.height) * 0.5 // base size ~ quarter of screen area
+                        LottieView(animation: .named("3D Circle Loader"))
+                            .playing(loopMode: .playOnce)
+                            .animationSpeed(1.0)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: side, height: side)
+                            .scaleEffect(splashScaleFG, anchor: .center)
+                            .position(x: proxy.size.width/2, y: proxy.size.height/2)
+                            .accessibilityLabel("Microtuner animated logo")
+                    }
+                    .ignoresSafeArea()
+                }
+                .onAppear {
+                    withAnimation(.easeIn(duration: 3.0)) {
+                        splashScaleFG = 2.0   // foreground zoom in
+                    }
+                }
+                .transition(.opacity)
+                .zIndex(10)
             }
         }
-        .fileImporter(
-            isPresented: $showImporter,
-            allowedContentTypes: [
-                UTType(filenameExtension: "scl") ?? .plainText,
-                .utf8PlainText,
-                .text,
-                .plainText,
-                .data
-            ]
-        ) { result in
-            switch result {
-            case .success(let url):
-                print("Importer picked URL: \(url)")
-                var success = false
-                if url.startAccessingSecurityScopedResource() {
-                    defer { url.stopAccessingSecurityScopedResource() }
-                    success = Tuner.handleSCLImport(url: url, into: tuner)
-                } else {
-                    success = Tuner.handleSCLImport(url: url, into: tuner)
+        .onAppear {
+            tuner.start()
+            DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+                withAnimation(.easeInOut(duration: 0.4)) {
+                    showSplash = false
                 }
-                if !success {
-                    print("Failed to import .scl from \(url)")
-                }
-            case .failure(let err):
-                print("Importer error: \(err)")
             }
         }
     }
 }
 struct ScaleSidebar: View {
     @ObservedObject var tuner: Tuner
+    @Binding var showSaveConflict: Bool
+    @Binding var conflictURL: URL?
+    @Binding var renameText: String
     @State private var expanded: Bool = true
+    @State private var showEditScale = false
 
     private let noteNames = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"]
 
@@ -204,10 +282,24 @@ struct ScaleSidebar: View {
             .padding(.trailing)
 
             if let description = tuner.scaleDescription {
-                Text(description)
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .padding(.trailing)
+                HStack(spacing: 8) {
+                    Text(description)
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Button("Save scale") {
+                        guard let proposed = tuner.proposedLibraryURLForCurrentScale() else { return }
+                        if FileManager.default.fileExists(atPath: proposed.path) {
+                            conflictURL = proposed
+                            renameText = proposed.deletingPathExtension().lastPathComponent
+                            showSaveConflict = true
+                        } else {
+                            _ = tuner.saveCurrentScale(to: proposed, overwrite: false)
+                        }
+                    }
+                    .disabled(tuner.scaleStepsCents == nil)
+                }
+                .padding(.trailing)
             } else {
                 Text("No scale loaded")
                     .font(.callout)
@@ -217,7 +309,7 @@ struct ScaleSidebar: View {
             Divider()
 
             DisclosureGroup(isExpanded: $expanded) {
-                if let steps = tuner.scaleStepsCents, !steps.isEmpty {
+                if let steps = tuner.anchoredStepsCents ?? tuner.scaleStepsCents, !steps.isEmpty {
                     ScrollView {
                         VStack(alignment: .leading, spacing: 8) {
                             ForEach(Array(steps.enumerated()), id: \.0) { idx, cents in
@@ -246,13 +338,20 @@ struct ScaleSidebar: View {
             } label: {
                 HStack {
                     Text("Steps")
-                    if let steps = tuner.scaleStepsCents { Text("(\(steps.count))").foregroundStyle(.secondary) }
+                    if let steps = tuner.anchoredStepsCents ?? tuner.scaleStepsCents { Text("(\(steps.count))").foregroundStyle(.secondary) }
+                    Spacer()
+                    Button("Edit") { showEditScale = true }
+                        .disabled(tuner.scaleStepsCents == nil)
                 }
             }
 
             Spacer()
         }
         .padding(.horizontal, 12)
+        .sheet(isPresented: $showEditScale) {
+            ScaleEditorSheet(tuner: tuner, isPresented: $showEditScale)
+                .frame(minWidth: 520, minHeight: 520)
+        }
     }
 }
 
@@ -463,10 +562,259 @@ extension Color {
         self = Color(red: r, green: g, blue: b, opacity: alpha)
     }
 }
+/// Sheet to create a custom scale by entering step values (cents or ratios like a/b).
+struct ScaleCreatorSheet: View {
+    @ObservedObject var tuner: Tuner
+    @Binding var isPresented: Bool
+
+    @State private var descriptionText: String = "Custom scale"
+    @State private var stepTexts: [String] = ["0.0", "100.0", "200.0"]
+    @State private var errorMessage: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Create Scale").font(.title2).bold()
+                Spacer()
+                Button { isPresented = false } label: { Image(systemName: "xmark") }.buttonStyle(.plain)
+            }
+
+            Text("Description")
+            TextField("e.g. Custom 13-TET", text: $descriptionText)
+                .textFieldStyle(.roundedBorder)
+
+            Divider()
+
+            HStack {
+                Text("Steps (cents or ratios like 3/2)").bold()
+                Spacer()
+                Button(action: addStep) { Label("Add step", systemImage: "plus") }
+            }
+
+            ScrollView {
+                VStack(spacing: 8) {
+                    ForEach(stepTexts.indices, id: \.self) { i in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(String(format: "%02d", i)).font(.caption).monospacedDigit().frame(width: 28, alignment: .trailing)
+                            TextField("value", text: Binding(
+                                get: { stepTexts[i] },
+                                set: { stepTexts[i] = $0 }
+                            ))
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.body, design: .monospaced))
+                            .help("Examples: 100, 702.0, 3/2, 1.5/1, 100c")
+
+                            Spacer()
+                            Button(role: .destructive) {
+                                removeStep(at: i)
+                            } label: { Image(systemName: "trash") }
+                            .disabled(stepTexts.count <= 1)
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            if let err = errorMessage {
+                Text(err).foregroundStyle(.red).font(.footnote)
+            }
+
+            HStack {
+                Button("Reset") { resetPreset() }
+                Spacer()
+                Button("Cancel") { isPresented = false }
+                Button("Create") { createScale() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+    }
+
+    private func addStep() { stepTexts.append("") }
+    private func removeStep(at index: Int) { if stepTexts.indices.contains(index) { stepTexts.remove(at: index) } }
+    private func resetPreset() { stepTexts = ["0.0", "100.0", "200.0"] }
+
+    private func parseToken(_ token: String) -> Double? {
+        var t = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        t = t.replacingOccurrences(of: ",", with: ".")
+        if t.hasSuffix("c") || t.hasSuffix("C") { t.removeLast() }
+        if t.contains("/") {
+            let parts = t.split(separator: "/", maxSplits: 1).map { String($0) }
+            if parts.count == 2, let a = Double(parts[0]), let b = Double(parts[1]), b != 0 {
+                let ratio = a / b
+                return 1200.0 * log2(ratio)
+            } else { return nil }
+        } else {
+            return Double(t)
+        }
+    }
+
+    private func createScale() {
+        errorMessage = nil
+        var cents: [Double] = []
+        for raw in stepTexts {
+            let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if s.isEmpty { continue }
+            guard let v = parseToken(s) else {
+                errorMessage = "Invalid step: \(raw)"
+                return
+            }
+            cents.append(v)
+        }
+
+        // Normalize: keep [0,1200), include 0, sort, unique
+        var norm = cents.filter { $0 >= 0 && $0 < 1200 }
+        if !norm.contains(where: { abs($0 - 0.0) < 1e-6 }) { norm.append(0.0) }
+        norm.sort()
+        var unique: [Double] = []
+        for v in norm {
+            if let last = unique.last, abs(v - last) <= 1e-6 { continue }
+            unique.append(v)
+        }
+
+        guard unique.count >= 2 else {
+            errorMessage = "Add at least two distinct steps (0 and one more)."
+            return
+        }
+
+        tuner.loadScale(description: descriptionText.isEmpty ? "Custom scale" : descriptionText, steps: unique)
+        isPresented = false
+    }
+}
+
+/// Sheet to edit the currently loaded scale (raw cents relative to C, 0≤step<1200)
+struct ScaleEditorSheet: View {
+    @ObservedObject var tuner: Tuner
+    @Binding var isPresented: Bool
+
+    @State private var descriptionText: String = ""
+    @State private var stepTexts: [String] = []
+    @State private var errorMessage: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack {
+                Text("Edit Scale").font(.title2).bold()
+                Spacer()
+                Button { isPresented = false } label: { Image(systemName: "xmark") }.buttonStyle(.plain)
+            }
+
+            Text("Description")
+            TextField("Scale description", text: $descriptionText)
+                .textFieldStyle(.roundedBorder)
+
+            Divider()
+
+            HStack {
+                Text("Steps (cents or ratios like 3/2)").bold()
+                Spacer()
+                Button(action: addStep) { Label("Add step", systemImage: "plus") }
+            }
+
+            ScrollView {
+                VStack(spacing: 8) {
+                    ForEach(stepTexts.indices, id: \.self) { i in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Text(String(format: "%02d", i)).font(.caption).monospacedDigit().frame(width: 28, alignment: .trailing)
+                            TextField("value", text: Binding(
+                                get: { stepTexts[i] },
+                                set: { stepTexts[i] = $0 }
+                            ))
+                            .textFieldStyle(.roundedBorder)
+                            .font(.system(.body, design: .monospaced))
+                            .help("Examples: 100, 702.0, 3/2, 1.5/1, 100c")
+
+                            Spacer()
+                            Button(role: .destructive) { removeStep(at: i) } label: { Image(systemName: "trash") }
+                                .disabled(stepTexts.count <= 1)
+                        }
+                    }
+                }
+                .padding(.vertical, 4)
+            }
+
+            if let err = errorMessage {
+                Text(err).foregroundStyle(.red).font(.footnote)
+            }
+
+            HStack {
+                Button("Revert") { loadFromTuner() }
+                Spacer()
+                Button("Cancel") { isPresented = false }
+                Button("Save") { saveEdits() }
+                    .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+        .onAppear { loadFromTuner() }
+    }
+
+    private func loadFromTuner() {
+        descriptionText = tuner.scaleDescription ?? "Custom scale"
+        if let steps = tuner.scaleStepsCents, !steps.isEmpty {
+            stepTexts = steps.map { String(format: "%g", $0) }
+        } else {
+            stepTexts = ["0.0", "100.0", "200.0"]
+        }
+    }
+
+    private func addStep() { stepTexts.append("") }
+    private func removeStep(at index: Int) { if stepTexts.indices.contains(index) { stepTexts.remove(at: index) } }
+
+    private func parseToken(_ token: String) -> Double? {
+        var t = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        t = t.replacingOccurrences(of: ",", with: ".")
+        if t.hasSuffix("c") || t.hasSuffix("C") { t.removeLast() }
+        if t.contains("/") {
+            let parts = t.split(separator: "/", maxSplits: 1).map { String($0) }
+            if parts.count == 2, let a = Double(parts[0]), let b = Double(parts[1]), b != 0 {
+                let ratio = a / b
+                return 1200.0 * log2(ratio)
+            } else { return nil }
+        } else {
+            return Double(t)
+        }
+    }
+
+    private func saveEdits() {
+        errorMessage = nil
+        var cents: [Double] = []
+        for raw in stepTexts {
+            let s = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+            if s.isEmpty { continue }
+            guard let v = parseToken(s) else {
+                errorMessage = "Invalid step: \(raw)"
+                return
+            }
+            cents.append(v)
+        }
+
+        // Normalize: keep [0,1200), include 0, sort, unique
+        var norm = cents.filter { $0 >= 0 && $0 < 1200 }
+        if !norm.contains(where: { abs($0 - 0.0) < 1e-6 }) { norm.append(0.0) }
+        norm.sort()
+        var unique: [Double] = []
+        for v in norm {
+            if let last = unique.last, abs(v - last) <= 1e-6 { continue }
+            unique.append(v)
+        }
+
+        guard unique.count >= 2 else {
+            errorMessage = "Add at least two distinct steps (0 and one more)."
+            return
+        }
+
+        tuner.loadScale(description: descriptionText.isEmpty ? "Custom scale" : descriptionText, steps: unique)
+        isPresented = false
+    }
+}
+
 // Settings panel drawer
 struct SettingsPanel: View {
     @ObservedObject var tuner: Tuner
     var close: () -> Void
+    @State private var a4Text: String = ""
+    @State private var a4Error: String? = nil
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -478,7 +826,7 @@ struct SettingsPanel: View {
             }
 
             Group {
-                Text("Smoothing")
+                Text("Sensetivity")
                 Slider(value: Binding(get: { tuner.smoothingAlpha }, set: { tuner.smoothingAlpha = $0 }), in: 0.05...0.5)
                 Text(String(format: "%.2f", tuner.smoothingAlpha)).monospacedDigit().foregroundStyle(.secondary)
             }
@@ -498,14 +846,52 @@ struct SettingsPanel: View {
                     .foregroundStyle(.secondary)
             }
 
-            Button("Calibrate A4 = \(Int(tuner.a4Reference)) Hz") { tuner.cycleA4() }
-                .help("Cycle A4 reference among 438/440/442 Hz")
+            Group {
+                Text("A4 Reference (Hz)")
+                HStack(spacing: 8) {
+                    TextField("e.g. 440.0", text: $a4Text)
+                        .textFieldStyle(.roundedBorder)
+                        .frame(width: 120)
+                        .onSubmit { applyA4() }
+                    Button("Set") { applyA4() }
+                        .keyboardShortcut(.return, modifiers: [])
+                }
+                if let err = a4Error { Text(err).foregroundStyle(.red).font(.footnote) }
+                Text(String(format: "Current: %.2f Hz", tuner.a4Reference))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
 
             Spacer()
         }
         .padding(16)
         .frame(maxHeight: .infinity)
         .background(.ultraThickMaterial)
+        .onAppear { a4Text = String(format: "%.2f", tuner.a4Reference) }
+        .onChange(of: tuner.a4Reference) { newVal in
+            a4Text = String(format: "%.2f", newVal)
+        }
+    }
+
+    private func applyA4() {
+        a4Error = nil
+        var text = a4Text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty {
+            a4Error = "Please enter a frequency in Hz."
+            return
+        }
+        text = text.replacingOccurrences(of: ",", with: ".")
+        guard let val = Double(text), val.isFinite, val > 0 else {
+            a4Error = "Invalid number. Try 432, 440, 442, etc."
+            return
+        }
+        // Clamp to a reasonable musical range if desired (optional)
+        let clamped = max(200.0, min(1000.0, val))
+        if clamped != val {
+            a4Error = "Clamped to \(String(format: "%.2f", clamped)) Hz (200–1000 Hz)."
+        }
+        tuner.a4Reference = clamped
+        a4Text = String(format: "%.2f", clamped)
     }
 }
 
@@ -805,6 +1191,121 @@ final class Tuner: NSObject, ObservableObject {
         }
     }
 
+    /// Helper: Returns the Library/Application Support/Microtuner/Scales directory, creating it if needed.
+    private func libraryDirectory() -> URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let dir = base.appendingPathComponent("Microtuner/Scales", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    /// Helper: Slugifies a string for use as a filename (alphanumeric, dash, underscore, no spaces).
+    func slug(_ s: String) -> String {
+        let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-_ "))
+        let cleaned = s.unicodeScalars.map { allowed.contains($0) ? Character($0) : "-" }
+        var result = String(cleaned).trimmingCharacters(in: .whitespacesAndNewlines)
+        result = result.replacingOccurrences(of: " ", with: "-")
+        while result.contains("--") { result = result.replacingOccurrences(of: "--", with: "-") }
+        return result.isEmpty ? "scale" : result
+    }
+
+    func proposedLibraryURLForCurrentScale() -> URL? {
+        let desc = (self.scaleDescription?.isEmpty == false) ? self.scaleDescription! : "Custom scale"
+        let name = slug(desc)
+        return libraryDirectory().appendingPathComponent("\(name).scl")
+    }
+
+    @discardableResult
+    func saveCurrentScale(to url: URL, overwrite: Bool = false) -> Bool {
+        guard let text = generateSCLText() else { return false }
+        if !overwrite && FileManager.default.fileExists(atPath: url.path) {
+            return false
+        }
+        do {
+            try text.write(to: url, atomically: true, encoding: .utf8)
+            print("Saved scale to \(url.path)")
+            return true
+        } catch {
+            print("Failed to save scale: \(error)")
+            return false
+        }
+    }
+
+    /// Generate a Scala .scl text from the currently loaded scale.
+    /// Format:
+    ///   <description>\n
+    ///   <count>\n
+    ///   <step1>\n
+    ///   <step2>\n
+    ///   ... (values in cents with trailing 'c'), ending with the period as a ratio
+    func generateSCLText() -> String? {
+        guard let steps = self.scaleStepsCents, !steps.isEmpty else { return nil }
+        let desc = (self.scaleDescription?.isEmpty == false) ? self.scaleDescription! : "Custom scale"
+        var lines: [String] = []
+        lines.append(desc)
+        // Count is the number of notes including 1/1, but the list omits the initial 0.000c
+        lines.append("\(steps.count)")
+        for v in steps where abs(v) > 1e-9 {
+            // Write cents with up to 6 decimals and a trailing 'c' per common .scl conventions
+            lines.append(String(format: "%.6fc", v))
+        }
+        // Append the period explicitly as per user preference
+        lines.append("2/1")
+        return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// Save the current scale automatically to the app library folder as a .scl file.
+    /// Location: ~/Library/Application Support/Microtuner/Scales/
+    func saveCurrentScale() {
+        guard let url = proposedLibraryURLForCurrentScale() else { return }
+        _ = saveCurrentScale(to: url, overwrite: false)
+    }
+
+    struct ScaleRecord: Identifiable, Hashable {
+        let id = UUID()
+        let url: URL
+        let description: String
+        let stepCount: Int
+        let modified: Date?
+    }
+
+    func libraryRecords() -> [ScaleRecord] {
+        let dir = libraryDirectory()
+        guard let items = try? FileManager.default.contentsOfDirectory(at: dir, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) else { return [] }
+        var records: [ScaleRecord] = []
+        for u in items where u.pathExtension.lowercased() == "scl" {
+            let values = try? u.resourceValues(forKeys: [.contentModificationDateKey])
+            if let parsed = Self.parseSCL(at: u) {
+                records.append(ScaleRecord(url: u, description: parsed.description, stepCount: parsed.steps.count, modified: values?.contentModificationDate))
+            }
+        }
+        // Sort by most recently modified first
+        records.sort { (a, b) in
+            switch (a.modified, b.modified) {
+            case let (x?, y?): return x > y
+            case (_?, nil): return true
+            case (nil, _?): return false
+            default: return a.description.lowercased() < b.description.lowercased()
+            }
+        }
+        return records
+    }
+
+    func loadFromLibrary(_ rec: ScaleRecord) {
+        if let parsed = Self.parseSCL(at: rec.url) {
+            self.loadScale(description: parsed.description, steps: parsed.steps)
+        }
+    }
+
+    func deleteFromLibrary(_ rec: ScaleRecord) {
+        do {
+            try FileManager.default.removeItem(at: rec.url)
+            print("Deleted \(rec.url.lastPathComponent)")
+        } catch {
+            print("Delete failed: \(error)")
+        }
+    }
+
     static func readText(from url: URL) -> String? {
         // Try common encodings first
         let encodings: [String.Encoding] = [
@@ -950,4 +1451,141 @@ final class Tuner: NSObject, ObservableObject {
 
 #Preview {
     ContentView()
+}
+
+struct LoadScaleSheet: View {
+    @ObservedObject var tuner: Tuner
+    @Binding var isPresented: Bool
+    @State private var records: [Tuner.ScaleRecord] = []
+    @State private var query: String = ""
+    @State private var pendingDelete: Tuner.ScaleRecord? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text("Load Scale").font(.title2).bold()
+                Spacer()
+                Button { isPresented = false } label: { Image(systemName: "xmark") }.buttonStyle(.plain)
+            }
+
+            HStack {
+                Image(systemName: "magnifyingglass")
+                TextField("Search by name", text: $query)
+            }
+            .textFieldStyle(.roundedBorder)
+
+            List(filteredRecords, id: \.id) { rec in
+                HStack(spacing: 10) {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(rec.description).font(.body)
+                        HStack(spacing: 8) {
+                            Text("\(rec.stepCount) steps").font(.caption).foregroundStyle(.secondary)
+                            if let d = rec.modified {
+                                Text(d.formatted(date: .abbreviated, time: .shortened)).font(.caption).foregroundStyle(.tertiary)
+                            }
+                        }
+                    }
+                    Spacer()
+                    Button("Load") {
+                        tuner.loadFromLibrary(rec)
+                        isPresented = false
+                    }
+                    Button(role: .destructive) {
+                        pendingDelete = rec
+                    } label: {
+                        Text("Delete")
+                    }
+                }
+            }
+
+            if records.isEmpty {
+                VStack(spacing: 8) {
+                    Text("No saved scales found").foregroundStyle(.secondary)
+                    Text("Use ‘Save scale’ first.").font(.footnote).foregroundStyle(.tertiary)
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            HStack {
+                Spacer()
+                Button("Refresh") { reload() }
+            }
+        }
+        .padding(16)
+        .onAppear { reload() }
+        .alert(item: $pendingDelete) { rec in
+            Alert(
+                title: Text("Delete scale?"),
+                message: Text("Are you sure you want to delete \"\(rec.description)\"?"),
+                primaryButton: .destructive(Text("Delete")) {
+                    tuner.deleteFromLibrary(rec)
+                    reload()
+                },
+                secondaryButton: .cancel()
+            )
+        }
+    }
+
+    private var filteredRecords: [Tuner.ScaleRecord] {
+        if query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return records }
+        let q = query.lowercased()
+        return records.filter { $0.description.lowercased().contains(q) || $0.url.lastPathComponent.lowercased().contains(q) }
+    }
+
+    private func reload() {
+        records = tuner.libraryRecords()
+    }
+}
+
+// SaveConflictSheet view for save name collisions
+struct SaveConflictSheet: View {
+    @ObservedObject var tuner: Tuner
+    let existingURL: URL
+    @Binding var renameText: String
+    @Binding var isPresented: Bool
+    @State private var error: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("A file named ‘\(existingURL.deletingPathExtension().lastPathComponent)’ already exists.")
+                .font(.headline)
+            Text("Do you want to replace it, or save with a different name?")
+                .foregroundStyle(.secondary)
+
+            if let err = error {
+                Text(err).foregroundStyle(.red).font(.footnote)
+            }
+
+            HStack(spacing: 8) {
+                Text("New name:")
+                TextField("Name", text: $renameText)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: renameText) { _ in error = nil }
+            }
+
+            Spacer()
+
+            HStack {
+                Button("Cancel") { isPresented = false }
+                Spacer()
+                Button("Replace", role: .destructive) {
+                    _ = tuner.saveCurrentScale(to: existingURL, overwrite: true)
+                    isPresented = false
+                }
+                Button("Rename") {
+                    let slug = tuner.slug(renameText)
+                    if slug.isEmpty { error = "Please enter a valid name."; return }
+                    let newURL = existingURL.deletingLastPathComponent().appendingPathComponent("\(slug).scl")
+                    if FileManager.default.fileExists(atPath: newURL.path) {
+                        error = "A file with that name already exists."
+                        return
+                    }
+                    _ = tuner.saveCurrentScale(to: newURL, overwrite: false)
+                    isPresented = false
+                }
+                .keyboardShortcut(.defaultAction)
+            }
+        }
+        .padding(16)
+    }
 }

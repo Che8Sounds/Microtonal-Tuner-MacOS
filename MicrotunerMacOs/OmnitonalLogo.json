@@ -1,0 +1,37 @@
+import SwiftUI
+import Lottie
+
+struct ContentView: View {
+    @State private var showSplash = true
+
+    var body: some View {
+        ZStack {
+            // Your main content here
+
+            if showSplash {
+                ZStack {
+                    Color.white
+                    GeometryReader { proxy in
+                        let side = min(proxy.size.width, proxy.size.height) * 0.5
+                        LottieView(animation: .named("OmnitonalLogo"))
+                            .playing(loopMode: .playOnce)
+                            .animationSpeed(1.0)
+                            .resizable()
+                            .scaledToFit()
+                            .frame(width: side, height: side)
+                            .position(x: proxy.size.width / 2, y: proxy.size.height / 2)
+                            .accessibilityLabel("Microtuner animated logo")
+                    }
+                    .ignoresSafeArea()
+                }
+                .onAppear {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+                        withAnimation {
+                            showSplash = false
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
